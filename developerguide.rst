@@ -210,18 +210,199 @@ onto the FrameProcessor application for further processing.
 The aid the decoder developer every decoder object will have access to a buffer manager object, an empty
 buffer queue and a frame buffer map:
 
-* empty_buffer_queue_ The empty buffer queue is a container of integer index values.  Every index value stored in this container represents a shared memory buffer that is available for use.
-* frame_buffer_map_ This is a map of integer values that can be used if required to manage multiple partially filled buffers.
-* buffer_manager_ This class manages the underlying shared memory allocations.  The decoder can obtain a pointer to a memory block by calling the get_buffer_address method and passing into it an ID retrieved from the empty_buffer_queue_.
+* `empty_buffer_queue_` The empty buffer queue is a container of integer index values.  Every index value stored in this container represents a shared memory buffer that is available for use.
+* `frame_buffer_map_` This is a map of integer values that can be used if required to manage multiple partially filled buffers.
+* `buffer_manager_` This class manages the underlying shared memory allocations.  The decoder can obtain a pointer to a memory block by calling the get_buffer_address method and passing into it an ID retrieved from the `empty_buffer_queue_`.
 
 For sending completed buffers onto the FrameProcessor application, the decoder also has access to a helper
 function:
 
-* ready_callback_ This function can be called by the decoder and passed the buffer ID along with a frame number.  That buffer will be passed to the FrameProcessor application.
+* `ready_callback_` This function can be called by the decoder and passed the buffer ID along with a frame number.  That buffer will be passed to the FrameProcessor application.
 
-A barebones DummyDecoder.cpp file is presented below:
+A barebones DummyDecoder class is presented below:
+
+*DummyDecoder.h*
+
+.. code-block:: c++
+    :linenos:
+
+    #ifndef SRC_DUMMYDECODER_H_
+    #define SRC_DUMMYDECODER_H_
+
+    #include "FrameDecoderZMQ.h"
+    #include "gettime.h"
+    #include <string.h>
+    #include <stdint.h>
+    #include <time.h>
+    #include <iostream>
+    #include <iomanip>
+    #include <sstream>
+    #include <time.h>
+    #include <arpa/inet.h>
+    #include <boost/format.hpp>
+    #include "rapidjson/document.h"
+
+    namespace FrameReceiver
+    {
+    class DummyDecoder : public FrameDecoderZMQ
+    {
+    public:
+        DummyDecoder();
+        virtual ~DummyDecoder();
+        void init(LoggerPtr& logger, OdinData::IpcMessage& config_msg);
+        const size_t get_frame_buffer_size(void) const;
+        const size_t get_frame_header_size(void) const;
+
+        void* get_next_message_buffer(void);
+        FrameDecoder::FrameReceiveState process_message(size_t bytes_received);
+        void frame_meta_data(int meta);
+
+        void monitor_buffers(void);
+        void get_status(const std::string param_prefix, OdinData::IpcMessage& status_msg);
+
+        int get_version_major();
+        int get_version_minor();
+        int get_version_patch();
+        std::string get_version_short();
+        std::string get_version_long();
+
+    private:
+        boost::shared_ptr<void> empty_raw_buffer_;
+        int current_frame_number_;
+        int current_frame_buffer_id_;
+        bool dropping_frame_data_;
+    };
+
+    } /* namespace FrameReceiver */
+
+    #endif /* SRC_DUMMYDECODER_H_ */
 
 
+*DummyDecoder.cpp*
+
+.. code-block:: c++
+    :linenos:
+
+    #include "DummyDecoder.h"
+
+    namespace FrameReceiver
+    {
+
+    DummyDecoder::DummyDecoder()
+    {
+        current_frame_number_ = 0;
+        empty_raw_buffer_.reset(new uint8_t[100]);
+    }
+
+    DummyDecoder::~DummyDecoder()
+    {
+
+    }
+
+    void DummyDecoder::init(LoggerPtr& logger, OdinData::IpcMessage& config_msg)
+    {
+
+    }
+
+    const size_t DummyDecoder::get_frame_buffer_size(void) const
+    {
+        return 100;
+    }
+
+    const size_t DummyDecoder::get_frame_header_size(void) const
+    {
+        return 0;
+    }
+
+    void* DummyDecoder::get_next_message_buffer(void)
+    {
+        void *retPtr;
+        if (empty_buffer_queue_.empty()){
+            retPtr = empty_raw_buffer_.get();
+            current_frame_number_ = 0;
+        } else {
+            current_frame_buffer_id_ = empty_buffer_queue_.front();
+            empty_buffer_queue_.pop();
+            retPtr = buffer_manager_->get_buffer_address(current_frame_buffer_id_);
+            current_frame_number_++;
+        }
+        return retPtr;
+    }
+
+    FrameDecoder::FrameReceiveState DummyDecoder::process_message(size_t bytes_received)
+    {
+        if (current_frame_number_ > 0){
+            ready_callback_(current_frame_buffer_id_, current_frame_number_);
+        }
+    }
+
+    void DummyDecoder::frame_meta_data(int meta)
+    {
+
+    }
+
+    void DummyDecoder::monitor_buffers(void)
+    {
+
+    }
+
+    void DummyDecoder::get_status(const std::string param_prefix, OdinData::IpcMessage& status_msg)
+    {
+
+    }
+
+    int DummyDecoder::get_version_major()
+    {
+        return 0;
+    }
+
+    int DummyDecoder::get_version_minor()
+    {
+        return 0;
+    }
+
+    int DummyDecoder::get_version_patch()
+    {
+        return 0;
+    }
+
+    std::string DummyDecoder::get_version_short()
+    {
+        return "0.0.0";
+    }
+
+    std::string DummyDecoder::get_version_long()
+    {
+        return "0.0.0";
+    }
+
+    } /* namespace FrameReceiver */
+
+
+It can be seen from the DummyDecoder class files above that the only methods that deal with
+the handling of data and buffers are the *get_frame_buffer_size*, *get_next_message_buffer* 
+and *process_message* methods.
+
+The *get_frame_buffer_size* method just returns the size of buffers; for the DummyDecoder
+class this value is simply hard-coded to 100.
+
+The *get_next_message_buffer* method queries the `empty_buffer_queue_` and if there is an 
+available buffer it pops that off the queue.  Be aware that the value popped out of 
+the queue is simply an integer index of the underlying shared memory buffer.  To obtain a
+raw void pointer to the memory block this index must be mapped to the correct shared memory
+location and this is achieved by calling `buffer_manager_->get_buffer_address` and passing in
+the integer index value.  This raw pointer is passed as the return value of the 
+*get_next_message_buffer* method.  If no more empty buffers were available then the DummyDecoder
+simply passes back a spare pointer which can be used to effectively drop incoming frames.
+
+The *process_message* method is called once the ZMQ message has been placed into the memory
+buffer.  The DummyDecoder then simply needs to notify the application that the buffer is ready
+to be sent to the FrameProcessor.  To send a buffer `ready_callback_` is called and passed the
+index of the shared memory buffer and the frame number.  The frame number is a unique number
+applied to each frame within an acquisition.  This would normally be supplied by the hardware
+in either a header or attached to the frame and the decoder would parse the tha value out.  
+For the DummyDecoder case this frame number is simply generated and incremented within the 
+class.
 
 
 Developing a New FrameProcessor Plugin
