@@ -58,6 +58,171 @@ Odin Data
 Developing a New FrameReceiver Decoder
 **************************************
 
+This is a step by step guide to creating a new Odin Data C++ decoder, required by the 
+frameReceiver application to understand how to process incoming data.  For the duration
+of this guide we will refer to the decoder as the DummyDecoder.  The guide assumes that
+we are starting from an empty project, called the dummy-detector.
+
+There are two types of decoder that are currently supported by the Odin Data framework:
+
+* UDP - A UDP decoder receives multiple UDP packets on one or more ports and uses a scatter gather approach to order them into the shared memory buffers for use by the FrameProcessor aplication.
+* ZMQ - A ZMQ decoder binds to a ZeroMQ PULL socket and receives data into buffers from a ZeroMQ PUSH source.
+
+Both of these decoder types inherit from the base class FrameDecoder.  This guide will 
+demonstrate how to construct a decoder based on the ZMQ decoder type.
+
+Every detector specific decoder requires three files.
+
+In the frameReceiver/include directory create the file DummyDecoder.h.
+
+In the frameReceiver/src directory create the file DummyDecoder.cpp.
+
+In the frameReceiver/src directory create the file DummyDecoderLib.cpp::
+
+    cd <path to dummy detector>
+    cd data/frameReceiver
+    touch include/DummyDecoder.h
+    touch src/DummyDecoder.cpp
+    touch src/DummyDecoderLib.cpp
+
+The DummyDecoderLib.cpp file is required only by the classloader within the FrameReceiver 
+application.  Each decoder that is classloaded into a FrameReceiver must register itself by calling 
+a macro, and this resolves any name mangling issues.  However, the macro cannot be built into into 
+an application directly as this will result in compilation errors.  By adding the registration 
+code into a separate file a developer is free to compile the main decoder class into a main 
+application (e.g. for unit testing).
+
+For the DummyDetector the DummyDecoderLib.cpp file should contain the following contents
+
+.. code-block:: c++
+    :linenos:
+
+    #include "DummyDecoder.h"
+    #include "ClassLoader.h"
+
+    namespace FrameReceiver
+    {
+    /**
+    * Registration of this decoder through the ClassLoader.  This macro
+    * registers the class without needing to worry about name mangling
+    */
+    REGISTER(FrameDecoder, DummyDecoder, "DummyDecoder");
+
+    } // namespace FrameReceiver
+
+
+The file must include the header file for the main plugin and the header file for the ClassLoader 
+class.  It then declares the FrameReceiver namespace before calling the REGISTER macro.  The 
+macro takes three arguments.
+
+* Base class - always FrameDecoder
+* Child class - in this case the DummyDecoder class
+* String name - when the classloading is initiated the name is used as a key to store the object, this should always be the same as the name of the child class and within quotation marks.
+
+The main plugin class must always be a subclass of either the FrameDecoderUDP class or the 
+FrameDecoderZMQ class, ensuring that the methods necessary to ineract with the correct receiving
+classes are implemented.  The table below presents all of the methods that may be overridden
+by the decoder with a description of what the method is used for:
+
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|Method Name             |Required|Parameters                         |Description                                  |
++========================+========+===================================+=============================================+
+|init                    | No     |LoggerPtr &logger                  | Any initialisation required by the decoder  |
+|                        |        |OdinData::IpcMessage& config_msg   | should be added here. Detector specific     |
+|                        |        |                                   | parameters are passed in through the        |
+|                        |        |                                   | config_msg IpcMessage.  If this method is   |
+|                        |        |                                   | implemented then it should call             |
+|                        |        |                                   | FrameDecoder::init(logger, config_msg);     |
+|                        |        |                                   | to ensure the base class initialisation is  |
+|                        |        |                                   | executed.                                   |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_frame_buffer_size   | Yes    |                                   | This method should return the size of a     |
+|                        |        |                                   | frame buffer in bytes.                      |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_frame_header_size   | Yes    |                                   | This method should return the size of a     |
+|                        |        |                                   | frame header in bytes.                      |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_next_message_buffer | Yes    |                                   | This method should return a pointer to the  |
+|                        |        |                                   | next available shared memory buffer.        |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|process_message         | Yes    | size_t bytes_received             | This method is called whenever a new message|
+|                        |        |                                   | is received.  Any processing that is        |
+|                        |        |                                   | required takes place in this method and the |
+|                        |        |                                   | method should notify the application if a   |
+|                        |        |                                   | buffer is complete and ready to be passed to|
+|                        |        |                                   | the FrameProcessor application.             |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|monitor_buffers         | Yes    |                                   |                                             |
+|                        |        |                                   |                                             |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_status              | Yes    |const std::string param_prefix     | This method will be called whenever a client|
+|                        |        |OdinData::IpcMessage& status_msg   | requests status from the FrameReceiver      |
+|                        |        |                                   | application.  Any status items to be        |
+|                        |        |                                   | returned by this decoder should be added to |
+|                        |        |                                   | the status_msg IpcMessage object using the  |
+|                        |        |                                   | param_prefix string as the name prefix (eg  |
+|                        |        |                                   | status_msg.set_param(param_prefix +         |
+|                        |        |                                   | "item1", "value1");                         |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|request_configuration   | No     |const std::string param_prefix     | This method will be called whenever a client|
+|                        |        |OdinData::IpcMessage& config_reply | requests the current configuration setup    |
+|                        |        |                                   | from the FrameReceiver application.  Any    |
+|                        |        |                                   | configuration items to be returned by this  |
+|                        |        |                                   | decoder should be added to the config_reply |
+|                        |        |                                   | IpcMessage object using the param_prefix    |
+|                        |        |                                   | string as the name prefix (eg               |
+|                        |        |                                   | config_reply.set_param(param_prefix +       |
+|                        |        |                                   | "config1", "value1");                       |
+|                        |        |                                   | If this method is implemented it should call|
+|                        |        |                                   | the base class method first                 |
+|                        |        |                                   | FrameDecoder::request_configuration(        |
+|                        |        |                                   | param_prefix, config_reply);                |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_version_major       | Yes    |                                   | Returns the integer value of the major      |
+|                        |        |                                   | version number.                             |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_version_minor       | Yes    |                                   | Returns the integer value of the minor      |
+|                        |        |                                   | version number.                             |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_version_patch       | Yes    |                                   | Returns the integer value of the patch      |
+|                        |        |                                   | version number.                             |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_version_short       | Yes    |                                   | Returns a short string which contains the   |
+|                        |        |                                   | version.                                    |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+|get_version_long        | Yes    |                                   | Returns a string which contains the fully   |
+|                        |        |                                   | extended version.                           |
++------------------------+--------+-----------------------------------+---------------------------------------------+
+
+When a FrameReceiver application receives a decoder configuration request the decoder class is class 
+loaded into the application.  Once the decoder object is loaded the *init* method will be called and
+any additional configuration parameters passed in through this method call.
+When a new ZMQ message is received by the FrameReceiver application it will immediately call the 
+*get_next_message_buffer* method which should return a void pointer to an available memory block.
+The FrameReceiver then copies the received message into the memory block and calls *process_message*,
+passing into the method the number of bytes that were copied into the memory block.  After this the
+FrameReceiver checks to see if the ZMQ channel has specified that this was the last part of the message
+and if so it calls frame meta data with the value of 1.
+
+The decoder therefore has the responsibility of managing how the incoming ZMQ messages are recorded into
+the available memory buffers and when to notify the application that those buffers are ready to be passed
+onto the FrameProcessor application for further processing.
+The aid the decoder developer every decoder object will have access to a buffer manager object, an empty
+buffer queue and a frame buffer map:
+
+* empty_buffer_queue_ The empty buffer queue is a container of integer index values.  Every index value stored in this container represents a shared memory buffer that is available for use.
+* frame_buffer_map_ This is a map of integer values that can be used if required to manage multiple partially filled buffers.
+* buffer_manager_ This class manages the underlying shared memory allocations.  The decoder can obtain a pointer to a memory block by calling the get_buffer_address method and passing into it an ID retrieved from the empty_buffer_queue_.
+
+For sending completed buffers onto the FrameProcessor application, the decoder also has access to a helper
+function:
+
+* ready_callback_ This function can be called by the decoder and passed the buffer ID along with a frame number.  That buffer will be passed to the FrameProcessor application.
+
+A barebones DummyDecoder.cpp file is presented below:
+
+
+
 
 Developing a New FrameProcessor Plugin
 **************************************
@@ -435,6 +600,7 @@ Once these two files have been created, run the bash script and you should see o
 similar to the following
 
 .. code-block:: bash
+   :lineno-start: 1
 
    [user@pc bin]$ ./stFrameProcessor1.sh 
    8 [0x7fabca154b00] DEBUG FP.App null - Debug level set to  5
@@ -476,3 +642,15 @@ similar to the following
    16 [0x7fabca154b00] INFO FP.FrameProcessorController null - Running frame processor
    1013 [0x7fabbb388700] DEBUG FP.SharedMemoryController null - Requesting shared buffer 
    configuration from frame receiver
+
+
+
+
+
+
+(venv27) (dls-master) [gnx91527@pc0054 odin_data]$ python ./frame_processor_client.py -n bin -v 2
+{u'msg_val': u'configure', u'params': {}, u'id': 0, u'msg_type': u'ack', u'timestamp': u'2020-01-30T11:30:18.019396'}
+(venv27) (dls-master) [gnx91527@pc0054 odin_data]$ 
+(venv27) (dls-master) [gnx91527@pc0054 odin_data]$ 
+(venv27) (dls-master) [gnx91527@pc0054 odin_data]$ python ./frame_processor_client.py -n bin -v 3
+{u'msg_val': u'illegal', u'params': {}, u'id': 0, u'msg_type': u'nack', u'timestamp': u'2020-01-30T11:30:31.636649'}
