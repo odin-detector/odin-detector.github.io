@@ -1,11 +1,11 @@
-# ODIN detector software framework
+# Odin Detector Software Framework
 
-The ODIN detector software framework provides a python-based framework for the control plane of detector systems and a set of high performance data acquisition applications that integrate seamlessly into the control framework.
+The Odin Detector software framework provides a python-based framework for the control plane of detector systems and a set of high performance data acquisition applications that integrate seamlessly into the control framework.
 
 ![Odin Detector Schematic](./images/odin_overview.png)
 Figure 1. Odin detector architecture
 
-The Odin framework comprises two parts; Odin Control, the central control application, and Odin Data, a data acquisition stack, both of which can be used independently of each other as well as in conjunction.  These parts are maintained as two software repositories.  Documentation for each of the Odin repositories can be accessed here:
+The Odin Detector framework comprises two parts; Odin Control, the central control application, and Odin Data, a data acquisition stack, both of which can be used independently of each other as well as in conjunction.  These parts are maintained as two software repositories.  Documentation for each of the Odin repositories can be accessed here:
 
 - [Odin Control](http://odin-detector.github.io/odin-control/)
 - [Odin Detector](https://odin-detector.github.io/odin-data/)
