@@ -18,4 +18,3 @@ Devices that consist of multiple individual parts can lead to complications in t
 The Odin software framework is designed specifically for this modular architecture by mirroring the structure within its internal processes. For example, the data acquisition modules have the perspective of being one of many nodes built into the core of their logic. This makes it straightforward to operate multiple applications on the same hardware server or across muliple hardware servers working together to perform a single acquisition, all managed by a single point of control.
 
 Given the often collaborative nature of detector development, the Odin software framework has been designed to be generic, providing simple integration with any higher level control system.
-
