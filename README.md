@@ -8,7 +8,7 @@ Figure 1. Odin detector architecture
 The Odin Detector framework comprises two parts; Odin Control, the central control application, and Odin Data, a data acquisition stack, both of which can be used independently of each other as well as in conjunction.  These parts are maintained as two software repositories.  Documentation for each of the Odin repositories can be accessed here:
 
 - [Odin Control](http://odin-detector.github.io/odin-control/)
-- [Odin Detector](https://odin-detector.github.io/odin-data/)
+- [Odin Data](https://odin-detector.github.io/odin-data/)
 
 
 ## Rationale
